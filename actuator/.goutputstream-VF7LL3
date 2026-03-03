@@ -1,0 +1,62 @@
+#include <iostream>
+#include <fstream>
+#include <thread>
+#include <chrono>
+
+int angleToPulse(int angle) {
+    // Zet hoek 0-180 om naar pulsewidth 500-2500us
+    return 500 + (angle * 2000) / 180;
+}
+
+int main() {
+    const std::string pwm_chip = "/sys/class/pwm/pwmchip0";
+    const std::string pwm_channel = pwm_chip + "/pwm0";
+
+    // PWM export
+    {
+        std::ofstream export_pwm(pwm_chip + "/export");
+        export_pwm << "0";
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    // Stel periode in: 20ms (50Hz)
+    {
+        std::ofstream period_file(pwm_channel + "/period");
+        period_file << "20000000";
+    }
+
+    // Zet PWM aan
+    {
+        std::ofstream enable_file(pwm_channel + "/enable");
+        enable_file << "1";
+    }
+
+    std::cout << "Servo sweep gestart op GPIO18 (Pin 12)...\n";
+
+    while (true) { // oneindige sweep
+        for (int angle = 0; angle <= 180; angle += 1) {
+            int pulse = angleToPulse(angle);
+            std::ofstream duty_file(pwm_channel + "/duty_cycle");
+            duty_file << pulse * 1000;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20)); // vertraging voor soepele beweging
+        }
+        for (int angle = 180; angle >= 0; angle -= 1) {
+            int pulse = angleToPulse(angle);
+            std::ofstream duty_file(pwm_channel + "/duty_cycle");
+            duty_file << pulse * 1000;
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+    }
+
+    // PWM uitzetten (wordt normaal niet bereikt)
+    {
+        std::ofstream disable_file(pwm_channel + "/enable");
+        disable_file << "0";
+    }
+    {
+        std::ofstream unexport_pwm(pwm_chip + "/unexport");
+        unexport_pwm << "0";
+    }
+
+    return 0;
+}
